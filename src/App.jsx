@@ -14,6 +14,7 @@ const COIN_RATE = 0.01
 const INIT_COINS = 1000
 const MIN_BET = 50
 const BET_STEP = 50
+const TOAST_DURATION = 6000
 const MAX_BET = 1000000
 const MAX_PURCHASE = 10000000
 const HOUSE_FEE = 0.02
@@ -245,46 +246,20 @@ const Stats = ({ metrics, total, status, coins, net, isActive }) => {
   )
 }
 
-const Log = ({ logs }) => {
-  const important = useMemo(() => {
-    const filtered = []
-    const seen = new Set()
-    for (let i = logs.length - 1; i >= 0; i--) {
-      const log = logs[i]
-      const timeKey = Math.floor(new Date(`2000-01-01 ${log.time}`).getTime() / 1000)
-      const key = `${log.type}-${timeKey}`
-      const critical = ['bet', 'win', 'purchase', 'withdraw', 'system'].includes(log.type)
-      if (critical && !seen.has(key)) {
-        seen.add(key)
-        filtered.push(log)
-      }
-    }
-    return filtered.slice(0, 6)
-  }, [logs])
-
-  return (
-    <div className="log-panel-compact">
-      <h3 className="log-title-compact">Key Events</h3>
-      <div className="log-window-compact">
-        {important.length === 0 ? (
-          <div className="log-empty"><span className="log-empty-icon">LOG</span><p>No events yet. Start a round!</p></div>
-        ) : (
-          important.map((l, i) => (
-            <div key={`${l.time}-${i}`} className={`log-entry-compact log-${l.type}`}>
-              <div className="log-header">
-                <span className="log-timestamp-compact">{l.time}</span>
-                <span className={`log-icon log-icon-${l.type}`}>
-                  {l.type === 'win' ? 'WIN' : l.type === 'bet' ? 'BET' : l.type === 'purchase' ? 'BUY' : l.type === 'withdraw' ? 'OUT' : l.type === 'system' ? 'SYS' : 'INFO'}
-                </span>
-              </div>
-              <p className="log-message-compact">{l.msg}</p>
-            </div>
-          ))
-        )}
+const ToastStack = ({ items, onDismiss }) => (
+  <div className="toast-stack" role="status" aria-live="polite">
+    {items.map((toast) => (
+      <div key={toast.id} className={`toast toast-${toast.type}`}>
+        <div className="toast-content">
+          <span className="toast-icon">{toast.type === 'win' ? '🏆' : toast.type === 'bet' ? '🎲' : toast.type === 'purchase' ? '💰' : toast.type === 'withdraw' ? '🏧' : 'ℹ️'}</span>
+          <p className="toast-message">{toast.msg}</p>
+          <button type="button" className="toast-close" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">×</button>
+        </div>
+        <div className="toast-progress" style={{ animationDuration: `${TOAST_DURATION}ms` }}></div>
       </div>
-    </div>
-  )
-}
+    ))}
+  </div>
+)
 
 function App() {
   const [coins, setCoins] = useState(INIT_COINS)
@@ -298,11 +273,12 @@ function App() {
   const [mistakes, setMistakes] = useState(0)
   const [resolving, setResolving] = useState(false)
   const [status, setStatus] = useState('IDLE')
-  const [logs, setLogs] = useState([])
   const [roundBet, setRoundBet] = useState(0)
   const [roundFee, setRoundFee] = useState(0)
   const [roundSummary, setRoundSummary] = useState(null)
+  const [toasts, setToasts] = useState([])
   const lastLog = useRef({ msg: '', ts: 0 })
+  const toastTimers = useRef(new Map())
 
   const totalPairs = HEROES.length
   const mistakesLimit = MAX_MISTAKES / 2
@@ -322,16 +298,25 @@ function App() {
       : { bet, profit: 0, pot: 0, mistakes: 0, pairs: 0 }
   const net = coins - INIT_COINS - spent + withdrawn
 
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+    const timer = toastTimers.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      toastTimers.current.delete(id)
+    }
+  }, [])
+
   const addLog = useCallback((msg, type = 'info') => {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
     const now = Date.now()
     if (lastLog.current.msg === msg && now - lastLog.current.ts < 500) return
     lastLog.current = { msg, ts: now }
-    setLogs((prev) => {
-      const arr = [...prev, { time, msg, type }]
-      return arr.length > 50 ? arr.slice(-50) : arr
-    })
-  }, [])
+    const id = `${now}-${Math.random().toString(36).slice(2, 8)}`
+    setToasts((prev) => [...prev, { id, time, msg, type }])
+    const timer = setTimeout(() => removeToast(id), TOAST_DURATION)
+    toastTimers.current.set(id, timer)
+  }, [removeToast])
 
   useEffect(() => {
     addLog(`Welcome! Starting balance: ${fmt(INIT_COINS)} coins ($${toDollar(INIT_COINS)})`, 'system')
@@ -443,6 +428,11 @@ function App() {
 
   const restart = () => setStatus('IDLE')
 
+  useEffect(() => () => {
+    toastTimers.current.forEach((timer) => clearTimeout(timer))
+    toastTimers.current.clear()
+  }, [])
+
   const overlayMessage = roundSummary
     ? roundSummary.outcome === 'WON'
       ? `You won ${fmt(roundSummary.payout)} coins ($${toDollar(roundSummary.payout)}). Net after fee: ${roundSummary.netAfterFee >= 0 ? '+' : ''}${fmt(roundSummary.netAfterFee)} coins. Mistakes: ${roundSummary.mistakes}.`
@@ -461,9 +451,9 @@ function App() {
         </main>
         <aside className="sidebar-right">
           <Controls onStart={startRound} onWithdraw={withdraw} onPurchase={buyCoins} canStart={canStart} isResolving={resolving} status={status} coins={coins} bet={bet} setBet={(v) => setBet(Math.min(Math.max(MIN_BET, v), MAX_BET))} purchase={purchase} setPurchase={(v) => setPurchase(Math.min(Math.max(MIN_BET, v), MAX_PURCHASE))} feeEstimate={projectedFee}/>
-          <Log logs={logs}/>
         </aside>
       </div>
+      <ToastStack items={toasts} onDismiss={removeToast}/>
     </div>
   )
 }

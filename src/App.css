@@ -65,7 +65,7 @@ body, #root {
 .app-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 250px 1fr 260px;
   gap: 0;
   overflow: hidden;
   min-height: 0;
@@ -81,7 +81,7 @@ body, #root {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   backdrop-filter: blur(10px);
 }
 
@@ -255,13 +255,13 @@ body, #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1.5rem;
   background: radial-gradient(ellipse at center, rgba(99,102,241,0.05) 0%, transparent 70%);
 }
 
 .game-board-container {
   position: relative;
-  padding: 2rem;
+  padding: 1.5rem;
   background: linear-gradient(145deg, rgba(26,31,46,0.6), rgba(17,24,39,0.6));
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
@@ -278,9 +278,9 @@ body, #root {
 
 .game-board-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 180px));
-  grid-template-rows: repeat(3, minmax(180px, 220px));
-  gap: 1.5rem;
+  grid-template-columns: repeat(4, minmax(125px, 160px));
+  grid-template-rows: repeat(3, minmax(160px, 200px));
+  gap: 1.25rem;
   justify-content: center;
   align-items: center;
 }
@@ -341,6 +341,96 @@ body, #root {
   font-size: 0.85rem;
   color: var(--c-text-dim);
   letter-spacing: 0.04em;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Toast Notifications                                                        */
+/* -------------------------------------------------------------------------- */
+.toast-stack {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 240px;
+  max-width: 320px;
+  background: rgba(14, 19, 36, 0.92);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  border-radius: var(--radius-l);
+  box-shadow: 0 18px 40px -24px rgba(0,0,0,0.85);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.toast-content {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+}
+
+.toast-icon {
+  font-size: 1.25rem;
+}
+
+.toast-message {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--c-text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.15rem;
+  transition: color var(--trans-fast);
+}
+
+.toast-close:hover {
+  color: var(--c-text);
+}
+
+.toast-progress {
+  height: 3px;
+  background: var(--c-accent);
+  animation: toastProgress linear forwards;
+}
+
+.toast-bet {
+  border-left: 4px solid var(--c-accent);
+}
+
+.toast-win {
+  border-left: 4px solid var(--c-positive);
+}
+
+.toast-purchase {
+  border-left: 4px solid #60a5fa;
+}
+
+.toast-withdraw {
+  border-left: 4px solid var(--c-negative);
+}
+
+.toast-system {
+  border-left: 4px solid rgba(129, 140, 248, 0.6);
+}
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 
 /* -------------------------------------------------------------------------- */
