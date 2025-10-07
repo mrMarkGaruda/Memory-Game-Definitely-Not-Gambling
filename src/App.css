@@ -299,6 +299,50 @@ body, #root {
   border-radius: inherit; 
 }
 
+.game-board-grid--blurred {
+  filter: blur(8px);
+  pointer-events: none;
+  transition: filter var(--trans-med);
+}
+
+.board-overlay--preround {
+  flex-direction: column;
+  gap: 1.25rem;
+  text-align: center;
+  padding: 2.5rem;
+}
+
+.preround-card {
+  background: rgba(15, 21, 38, 0.8);
+  border: 1px solid rgba(255, 201, 102, 0.35);
+  border-radius: var(--radius-xl);
+  padding: 2rem 2.5rem;
+  box-shadow: 0 25px 45px -30px rgba(0, 0, 0, 0.65);
+  max-width: 420px;
+}
+
+.preround-title {
+  font-size: 1.5rem;
+  color: var(--c-accent);
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.preround-message {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.preround-hint {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--c-text-dim);
+  letter-spacing: 0.04em;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Card Styles                                                                */
 /* -------------------------------------------------------------------------- */
@@ -469,6 +513,67 @@ body, #root {
   background: rgba(0, 0, 0, 0.3);
   cursor: not-allowed;
   color: var(--c-text-dim);
+}
+
+.quick-bet-container {
+  margin-bottom: 0.75rem;
+}
+
+.quick-bet-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 0 0.4rem;
+}
+
+.quick-bet-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quick-bet-button {
+  flex: 1 1 90px;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--c-border);
+  background: rgba(129, 140, 248, 0.18);
+  color: var(--c-text);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-bet-button:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.3);
+  border-color: rgba(129, 140, 248, 0.6);
+  transform: translateY(-2px);
+}
+
+.quick-bet-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.quick-bet-button[data-active="true"] {
+  background: rgba(255, 201, 102, 0.28);
+  border-color: var(--c-border-strong);
+  color: var(--c-accent);
+  box-shadow: 0 0 12px rgba(255, 201, 102, 0.22);
+}
+
+.quick-bet-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  color: var(--c-text-dim);
+  letter-spacing: 0.4px;
 }
 
 .control-button {

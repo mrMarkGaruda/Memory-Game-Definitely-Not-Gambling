@@ -13,6 +13,7 @@ const HEROES = [
 const COIN_RATE = 0.01
 const INIT_COINS = 1000
 const MIN_BET = 50
+const BET_STEP = 50
 const MAX_BET = 1000000
 const MAX_PURCHASE = 10000000
 const HOUSE_FEE = 0.02
@@ -73,12 +74,23 @@ const Card = React.memo(({ card, onFlip, isActive }) => {
   )
 })
 
-const GameBoard = ({ deck, onFlip, isActive, isResolving, status, msg, onClose }) => (
-  <div className="game-board-container">
-    <div className="game-board-grid">
-      {deck.map((c) => <Card key={c.id} card={c} onFlip={onFlip} isActive={isActive && !isResolving} />)}
-    </div>
-    {status === 'WON' && (
+const GameBoard = ({ deck, onFlip, isActive, isResolving, status, msg, onClose }) => {
+  const needsStart = status === 'IDLE'
+  return (
+    <div className="game-board-container">
+      <div className={`game-board-grid ${needsStart ? 'game-board-grid--blurred' : ''}`}>
+        {deck.map((c) => <Card key={c.id} card={c} onFlip={onFlip} isActive={isActive && !isResolving} />)}
+      </div>
+      {needsStart && (
+        <div className="board-overlay board-overlay--preround" aria-live="polite">
+          <div className="preround-card">
+            <h2 className="preround-title">Ready to Play?</h2>
+            <p className="preround-message">Place a bet and start a round to reveal the heroes.</p>
+            <p className="preround-hint">Cards stay hidden until a round begins.</p>
+          </div>
+        </div>
+      )}
+      {status === 'WON' && (
       <div className="round-overlay-backdrop">
         <div className="round-overlay-card win-overlay">
           <h2 className="overlay-title">VICTORY!</h2>
@@ -86,8 +98,8 @@ const GameBoard = ({ deck, onFlip, isActive, isResolving, status, msg, onClose }
           <button className="overlay-button button-win" onClick={onClose}>Start Next Round</button>
         </div>
       </div>
-    )}
-    {status === 'LOST' && (
+      )}
+      {status === 'LOST' && (
       <div className="round-overlay-backdrop">
         <div className="round-overlay-card lose-overlay">
           <h2 className="overlay-title">GAME OVER</h2>
@@ -95,23 +107,90 @@ const GameBoard = ({ deck, onFlip, isActive, isResolving, status, msg, onClose }
           <button className="overlay-button button-lose" onClick={onClose}>Try Again</button>
         </div>
       </div>
-    )}
-  </div>
-)
+      )}
+    </div>
+  )
+}
 
-const Controls = ({ onStart, onWithdraw, onPurchase, canStart, isResolving, status, coins, bet, setBet, purchase, setPurchase }) => {
+const Controls = ({ onStart, onWithdraw, onPurchase, canStart, isResolving, status, coins, bet, setBet, purchase, setPurchase, feeEstimate }) => {
   const active = status === 'ACTIVE'
+  const totalRequired = bet + feeEstimate
+  const disableQuick = active || isResolving
+  const quickOptions = useMemo(() => ([
+    { label: '25%', ratio: 0.25 },
+    { label: '50%', ratio: 0.5 },
+    { label: '75%', ratio: 0.75 },
+  ]), [])
+
+  const computeAffordableBet = useCallback((target) => {
+    if (!Number.isFinite(target)) target = MIN_BET
+    let candidate = Math.min(MAX_BET, Math.max(MIN_BET, Math.floor(target)))
+    candidate = Math.floor(candidate / BET_STEP) * BET_STEP
+    if (candidate < MIN_BET) candidate = MIN_BET
+    const affordable = (value) => value + Math.floor(value * HOUSE_FEE) <= coins
+    while (candidate >= MIN_BET && !affordable(candidate)) {
+      candidate -= BET_STEP
+    }
+    if (candidate < MIN_BET) return MIN_BET
+    return candidate
+  }, [coins])
+
+  const applyQuickBet = useCallback((ratio) => {
+    if (disableQuick) return
+    const target = coins * ratio
+    const nextBet = computeAffordableBet(target)
+    setBet(nextBet)
+  }, [coins, disableQuick, computeAffordableBet, setBet])
+
+  const applyMaxBet = useCallback(() => {
+    if (disableQuick) return
+    const nextBet = computeAffordableBet(coins)
+    setBet(nextBet)
+  }, [coins, disableQuick, computeAffordableBet, setBet])
   return (
     <div className="controls-panel">
       <h2 className="panel-title">Game Controls</h2>
       <div className="control-group">
         <p className="control-label">Bet Amount (Coins):</p>
-        <input type="number" value={bet} onChange={(e) => setBet(parseInt(e.target.value) || MIN_BET)} min={MIN_BET} max={MAX_BET} step={50} className="control-input" disabled={active || isResolving}/>
+  <input type="number" value={bet} onChange={(e) => setBet(parseInt(e.target.value) || MIN_BET)} min={MIN_BET} max={MAX_BET} step={BET_STEP} className="control-input" disabled={active || isResolving}/>
+        <div className="quick-bet-container">
+          <p className="quick-bet-heading">Quick Bets</p>
+          <div className="quick-bet-buttons">
+            {quickOptions.map(({ label, ratio }) => {
+              const suggested = computeAffordableBet(coins * ratio)
+              const isActiveOption = bet === suggested
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  className="quick-bet-button"
+                  onClick={() => applyQuickBet(ratio)}
+                  disabled={disableQuick}
+                  data-active={isActiveOption ? 'true' : undefined}
+                  title={`Sets bet to ${fmt(suggested)} coins`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              className="quick-bet-button quick-bet-button-max"
+              onClick={applyMaxBet}
+              disabled={disableQuick}
+              data-active={bet === computeAffordableBet(coins) ? 'true' : undefined}
+              title={`Sets bet to the maximum ${fmt(computeAffordableBet(coins))} coins you can cover with fees`}
+            >
+              Max
+            </button>
+          </div>
+          <p className="quick-bet-hint">These shortcuts pick the largest bet that still covers house fees.</p>
+        </div>
         <button className="control-button button-accent" onClick={onStart} disabled={!canStart || isResolving || active}>
           {active ? 'Game in Progress...' : 'Start New Round'}
         </button>
         {bet < MIN_BET && <p className="input-feedback-error">Min bet is {fmt(MIN_BET)} Coins.</p>}
-        {bet > coins && <p className="input-feedback-error">Not enough coins for this bet!</p>}
+        {coins < totalRequired && <p className="input-feedback-error">You need {fmt(totalRequired)} coins (includes {fmt(feeEstimate)} coin fee).</p>}
       </div>
       <hr className="control-divider"/>
       <div className="control-group">
@@ -131,32 +210,40 @@ const Controls = ({ onStart, onWithdraw, onPurchase, canStart, isResolving, stat
   )
 }
 
-const Stats = ({ mistakes, pairs, total, status, coins, net, bet, pot, profit }) => (
-  <div className="stats-sidebar">
-    <div className="sidebar-section">
-      <h3 className="sidebar-title">Game Stats</h3>
-      <div className="stat-row"><span className="stat-label">Status</span><span className={`stat-value status-${status.toLowerCase()}`}>{status}</span></div>
-      <div className="stat-row"><span className="stat-label">Pairs</span><span className="stat-value text-positive">{pairs}/{total}</span></div>
-      <div className="stat-row"><span className="stat-label">Mistakes</span><span className="stat-value text-negative">{mistakes}</span></div>
+const Stats = ({ metrics, total, status, coins, net, isActive }) => {
+  const { bet, profit, pot, mistakes, pairs } = metrics
+  const profitClass = profit > 0 ? 'stat-value text-positive' : profit < 0 ? 'stat-value text-negative' : 'stat-value'
+  const potClass = pot > 0 ? 'stat-value text-accent' : 'stat-value'
+  const statusLabel = isActive ? 'ACTIVE' : status
+  const profitLabel = `${profit >= 0 ? '+' : ''}${fmt(profit)}`
+
+  return (
+    <div className="stats-sidebar">
+      <div className="sidebar-section">
+        <h3 className="sidebar-title">Game Stats</h3>
+        <div className="stat-row"><span className="stat-label">Status</span><span className={`stat-value status-${statusLabel.toLowerCase()}`}>{statusLabel}</span></div>
+        <div className="stat-row"><span className="stat-label">Pairs</span><span className="stat-value text-positive">{pairs}/{total}</span></div>
+        <div className="stat-row"><span className="stat-label">Mistakes</span><span className="stat-value text-negative">{mistakes}</span></div>
+      </div>
+      <div className="sidebar-section sidebar-highlight">
+        <h3 className="sidebar-title">Balance</h3>
+        <div className="stat-value-large stat-coins">{fmt(coins)}</div>
+        <div className="stat-subtext">${toDollar(coins)}</div>
+      </div>
+      <div className="sidebar-section">
+        <h3 className="sidebar-title">Current Round</h3>
+        <div className="stat-row"><span className="stat-label">Bet</span><span className="stat-value">{fmt(bet)}</span></div>
+        <div className="stat-row"><span className="stat-label">Net (after fee)</span><span className={profitClass}>{profitLabel}</span></div>
+        <div className="stat-row"><span className="stat-label">Pot Left</span><span className={potClass}>{fmt(pot)}</span></div>
+      </div>
+      <div className={`sidebar-section ${net >= 0 ? 'sidebar-profit' : 'sidebar-loss'}`}>
+        <h3 className="sidebar-title">Net P/L</h3>
+        <div className={`stat-value-large ${net >= 0 ? 'text-positive' : 'text-negative'}`}>{net >= 0 ? '+' : ''}{fmt(net)}</div>
+        <div className={`stat-subtext ${net >= 0 ? 'text-positive' : 'text-negative'}`}>{net >= 0 ? '+' : ''}${toDollar(net)}</div>
+      </div>
     </div>
-    <div className="sidebar-section sidebar-highlight">
-      <h3 className="sidebar-title">Balance</h3>
-      <div className="stat-value-large stat-coins">{fmt(coins)}</div>
-      <div className="stat-subtext">${toDollar(coins)}</div>
-    </div>
-    <div className="sidebar-section">
-      <h3 className="sidebar-title">Current Round</h3>
-      <div className="stat-row"><span className="stat-label">Bet</span><span className="stat-value">{fmt(bet)}</span></div>
-      <div className="stat-row"><span className="stat-label">Win</span><span className="stat-value text-positive">+{fmt(profit)}</span></div>
-      <div className="stat-row"><span className="stat-label">Pot Left</span><span className="stat-value text-accent">{fmt(pot)}</span></div>
-    </div>
-    <div className={`sidebar-section ${net >= 0 ? 'sidebar-profit' : 'sidebar-loss'}`}>
-      <h3 className="sidebar-title">Net P/L</h3>
-      <div className={`stat-value-large ${net >= 0 ? 'text-positive' : 'text-negative'}`}>{net >= 0 ? '+' : ''}{fmt(net)}</div>
-      <div className={`stat-subtext ${net >= 0 ? 'text-positive' : 'text-negative'}`}>{net >= 0 ? '+' : ''}${toDollar(net)}</div>
-    </div>
-  </div>
-)
+  )
+}
 
 const Log = ({ logs }) => {
   const important = useMemo(() => {
@@ -212,17 +299,28 @@ function App() {
   const [resolving, setResolving] = useState(false)
   const [status, setStatus] = useState('IDLE')
   const [logs, setLogs] = useState([])
-  const [roundPayout, setRoundPayout] = useState(0)
+  const [roundBet, setRoundBet] = useState(0)
+  const [roundFee, setRoundFee] = useState(0)
+  const [roundSummary, setRoundSummary] = useState(null)
   const lastLog = useRef({ msg: '', ts: 0 })
 
+  const totalPairs = HEROES.length
+  const mistakesLimit = MAX_MISTAKES / 2
+  const projectedFee = Math.floor(bet * HOUSE_FEE)
+  const canStart = bet >= MIN_BET && coins >= bet + projectedFee
+  const roundActive = status === 'ACTIVE'
+  const accuracyMultiplier = roundActive ? calcPayout(mistakes) : 0
+  const potentialPayout = roundActive ? Math.floor(roundBet * accuracyMultiplier) : 0
+  const completionRatio = roundActive && totalPairs ? pairs / totalPairs : 0
+  const payoutProgress = roundActive ? Math.floor(potentialPayout * completionRatio) : 0
+  const potLeft = roundActive ? Math.max(0, potentialPayout - payoutProgress) : 0
+  const potentialNet = roundActive ? potentialPayout - roundBet - roundFee : 0
+  const statsMetrics = roundActive
+    ? { bet: roundBet, profit: potentialNet, pot: potLeft, mistakes, pairs }
+    : roundSummary
+      ? { bet: roundSummary.bet, profit: roundSummary.netAfterFee, pot: 0, mistakes: roundSummary.mistakes, pairs: roundSummary.pairs }
+      : { bet, profit: 0, pot: 0, mistakes: 0, pairs: 0 }
   const net = coins - INIT_COINS - spent + withdrawn
-  const canStart = coins >= bet && bet >= MIN_BET
-  const mult = calcPayout(mistakes)
-  const payout = status === 'ACTIVE' ? roundPayout : Math.floor(bet * mult)
-  const profit = Math.max(0, payout - bet)
-  const perPair = Math.floor(payout / HEROES.length)
-  const potLeft = perPair * (HEROES.length - pairs)
-  const fee = Math.floor(bet * HOUSE_FEE)
 
   const addLog = useCallback((msg, type = 'info') => {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -237,7 +335,7 @@ function App() {
 
   useEffect(() => {
     addLog(`Welcome! Starting balance: ${fmt(INIT_COINS)} coins ($${toDollar(INIT_COINS)})`, 'system')
-  }, [])
+  }, [addLog])
 
   const handleFlip = useCallback((id) => {
     if (resolving || status !== 'ACTIVE') return
@@ -255,7 +353,6 @@ function App() {
         if (match) {
           setDeck((prev) => prev.map((c) => c.id === c1.id || c.id === c2.id ? { ...c, isMatched: true, isFlipped: true } : c))
           setPairs((p) => p + 1)
-          setCoins((c) => c + perPair)
         } else {
           setDeck((prev) => prev.map((c) => c.id === c1.id || c.id === c2.id ? { ...c, isFlipped: false } : c))
           setMistakes((m) => m + 1)
@@ -265,36 +362,63 @@ function App() {
       }, 1000)
       return () => clearTimeout(t)
     }
-  }, [flipped, perPair])
+  }, [flipped])
+
+  const concludeRound = useCallback(({ outcome, finalPairs, finalMistakes }) => {
+    if (!roundBet) return
+    const multiplier = calcPayout(finalMistakes)
+    const maxPayout = Math.floor(roundBet * multiplier)
+    const completionRatio = outcome === 'WON' ? 1 : (totalPairs ? Math.min(1, Math.max(0, finalPairs / totalPairs)) : 0)
+    const payout = Math.floor(maxPayout * completionRatio)
+    const profitBeforeFee = payout - roundBet
+    const netAfterFee = profitBeforeFee - roundFee
+
+    setCoins((c) => c + payout)
+
+    const summary = {
+      outcome,
+      bet: roundBet,
+      fee: roundFee,
+      payout,
+      profit: profitBeforeFee,
+      netAfterFee,
+      mistakes: finalMistakes,
+      pairs: finalPairs,
+    }
+    setRoundSummary(summary)
+
+    if (outcome === 'WON') {
+      addLog(`Round WON! Payout: ${fmt(payout)} coins (net ${netAfterFee >= 0 ? '+' : ''}${fmt(netAfterFee)} after fee).`, 'win')
+    } else {
+      addLog(`Round LOST. Returned ${fmt(payout)} coins (net ${netAfterFee >= 0 ? '+' : ''}${fmt(netAfterFee)} after fee).`, 'system')
+    }
+    addLog(`House kept ${fmt(roundFee)} coins fee.`, 'system')
+
+    setStatus(outcome)
+    setRoundBet(0)
+    setRoundFee(0)
+  }, [roundBet, roundFee, totalPairs, addLog])
 
   useEffect(() => {
-    if (status !== 'ACTIVE') return
-    if (pairs === HEROES.length) {
-      const extra = payout - (perPair * pairs)
-      if (extra > 0) {
-        setCoins(c => {
-          const nc = c + extra
-          addLog(`ROUND WON! Collected final pot: ${fmt(extra)} coins. Total won: ${fmt(payout)} coins!`, 'win')
-          return nc
-        })
-      }
-      setStatus('WON')
-      addLog(`Perfect! You matched all ${HEROES.length} pairs and won ${fmt(payout)} coins ($${toDollar(payout)}) - that's +${fmt(profit)} profit!`, 'system')
-      return
+    if (!roundActive || !roundBet) return
+    if (pairs === totalPairs) {
+      concludeRound({ outcome: 'WON', finalPairs: pairs, finalMistakes: mistakes })
+    } else if (mistakes >= mistakesLimit) {
+      concludeRound({ outcome: 'LOST', finalPairs: pairs, finalMistakes: mistakes })
     }
-    if (mistakes >= MAX_MISTAKES / 2) {
-      setStatus('LOST')
-      addLog(`Round LOST with ${mistakes} mistakes. You only keep what you earned before losing.`, 'system')
-      addLog(`House keeps ${fmt(fee)} coins fee. Better luck next time!`, 'system')
-    }
-  }, [pairs, mistakes, status, potLeft, payout, perPair, fee, profit, addLog])
+  }, [roundActive, roundBet, pairs, totalPairs, mistakes, mistakesLimit, concludeRound])
 
   const startRound = () => {
     if (!canStart) return
-    const currentPayout = Math.floor(bet * calcPayout(0))
-    setRoundPayout(currentPayout)
-    setCoins(c => c - bet)
-    addLog(`Round Started - Bet: ${fmt(bet)} coins. Win: ${fmt(currentPayout)} coins (+${fmt(currentPayout - bet)} profit)`, 'bet')
+    const entryFee = Math.floor(bet * HOUSE_FEE)
+    const totalCost = bet + entryFee
+    const perfectPayout = Math.floor(bet * calcPayout(0))
+    const perfectNet = perfectPayout - bet - entryFee
+    setCoins(c => c - totalCost)
+    setRoundBet(bet)
+    setRoundFee(entryFee)
+    setRoundSummary(null)
+    addLog(`Round Started - Bet: ${fmt(bet)} coins, Fee: ${fmt(entryFee)} coins. Perfect payout: ${fmt(perfectPayout)} (net ${perfectNet >= 0 ? '+' : ''}${fmt(perfectNet)}).`, 'bet')
     setFlipped([])
     setPairs(0)
     setMistakes(0)
@@ -319,22 +443,24 @@ function App() {
 
   const restart = () => setStatus('IDLE')
 
-  const msg = status === 'WON'
-    ? `You won ${fmt(payout)} coins ($${toDollar(payout)}) - that's +${fmt(profit)} profit! House kept ${fmt(fee)} coins fee.`
-    : `You lost with ${mistakes} mistakes. ${fmt(potLeft)} coins were refunded. House kept ${fmt(fee)} coins fee.`
+  const overlayMessage = roundSummary
+    ? roundSummary.outcome === 'WON'
+      ? `You won ${fmt(roundSummary.payout)} coins ($${toDollar(roundSummary.payout)}). Net after fee: ${roundSummary.netAfterFee >= 0 ? '+' : ''}${fmt(roundSummary.netAfterFee)} coins. Mistakes: ${roundSummary.mistakes}.`
+      : `Round ended with ${roundSummary.mistakes} mistakes and ${roundSummary.pairs}/${totalPairs} matches. Returned ${fmt(roundSummary.payout)} coins (${roundSummary.netAfterFee >= 0 ? '+' : ''}${fmt(roundSummary.netAfterFee)} after fee).`
+    : ''
 
   return (
     <div className="app-container">
       <div className="app-main">
         <aside className="sidebar-left">
           <div className="app-branding"><h1 className="app-logo">Hero Match</h1></div>
-          <Stats mistakes={mistakes} pairs={pairs} total={HEROES.length} status={status} coins={coins} net={net} bet={bet} pot={potLeft} profit={profit}/>
+          <Stats metrics={statsMetrics} total={totalPairs} status={status} coins={coins} net={net} isActive={roundActive}/>
         </aside>
         <main className="game-area">
-          <GameBoard deck={deck} onFlip={handleFlip} isActive={status === 'ACTIVE'} isResolving={resolving} status={status} msg={msg} onClose={restart}/>
+          <GameBoard deck={deck} onFlip={handleFlip} isActive={status === 'ACTIVE'} isResolving={resolving} status={status} msg={overlayMessage} onClose={restart}/>
         </main>
         <aside className="sidebar-right">
-          <Controls onStart={startRound} onWithdraw={withdraw} onPurchase={buyCoins} canStart={canStart} isResolving={resolving} status={status} coins={coins} bet={bet} setBet={(v) => setBet(Math.min(Math.max(MIN_BET, v), MAX_BET))} purchase={purchase} setPurchase={(v) => setPurchase(Math.min(Math.max(MIN_BET, v), MAX_PURCHASE))}/>
+          <Controls onStart={startRound} onWithdraw={withdraw} onPurchase={buyCoins} canStart={canStart} isResolving={resolving} status={status} coins={coins} bet={bet} setBet={(v) => setBet(Math.min(Math.max(MIN_BET, v), MAX_BET))} purchase={purchase} setPurchase={(v) => setPurchase(Math.min(Math.max(MIN_BET, v), MAX_PURCHASE))} feeEstimate={projectedFee}/>
           <Log logs={logs}/>
         </aside>
       </div>
